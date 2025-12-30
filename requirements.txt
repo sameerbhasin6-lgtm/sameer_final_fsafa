@@ -8,3 +8,5 @@ textblob
 scikit-learn
 pypdf
 openpyxl
+wordcloud
+statsmodels
