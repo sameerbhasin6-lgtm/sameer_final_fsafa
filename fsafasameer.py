@@ -8,7 +8,6 @@ import numpy as np
 from pypdf import PdfReader
 import re
 from collections import Counter
-import difflib
 
 # --- LIBRARY CHECK ---
 try:
@@ -41,10 +40,6 @@ st.markdown("""
     .metric-sub { font-size: 12px; color: #888; }
     .delta-pos { color: #ff4b4b; font-weight: bold; font-size: 14px; } 
     .delta-neg { color: #00cc96; font-weight: bold; font-size: 14px; }
-    .risk-card { padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-    .low-risk { background-color: #f0fff4; border-left: 5px solid #00cc96; }
-    .mod-risk { background-color: #fff3cd; border-left: 5px solid #ffc107; }
-    .high-risk { background-color: #fff5f5; border-left: 5px solid #ff4b4b; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -144,127 +139,6 @@ def calculate_similarity(text1, text2):
         vectorizer = CountVectorizer().fit_transform([t1, t2])
         return cosine_similarity(vectorizer.toarray())[0][1]
     except: return 0
-
-# --- 4. LINGUISTIC ANALYSIS MODULES ---
-def analyze_linguistic(text_curr, red_flag_df, text_prev=None, metrics_curr=None):
-    if not text_curr or not metrics_curr: return None
-    
-    words_curr = re.findall(r'\w+', text_curr.lower())
-    total_words = metrics_curr['total_words']
-    
-    # Hedging and qualifier keywords (rule-based)
-    hedging_keywords = ['may', 'could', 'might', 'possibly', 'potentially', 'approximately', 'estimated', 'subject', 'however', 'although', 'despite', 'believe', 'consider']
-    qualifier_keywords = ['approximately', 'around', 'estimated', 'potential', 'uncertain']
-    
-    hedge_count = sum(1 for w in words_curr if any(hk in w for hk in hedging_keywords))
-    hedge_pct = (hedge_count / total_words) * 100
-    
-    qual_count = sum(1 for w in words_curr if any(qk in w for qk in qualifier_keywords))
-    qual_pct = (qual_count / total_words) * 100
-    
-    # One-time phrasing
-    onetime_keywords = ['one-time', 'exceptional', 'non-recurring', 'one off']
-    onetime_count = sum(1 for w in words_curr if any(ot in w for ot in onetime_keywords))
-    
-    # 1. Justification Density Analyzer (section-specific)
-    sensitive_sections = {
-        'Revenue Recognition': r'revenue recognition|income recognition',
-        'Exceptional Items': r'exceptional items|unusual items|extraordinary items',
-        'Provisions': r'provisions|contingent liabilities|impairments|write-downs'
-    }
-    section_metrics = {}
-    for name, pattern in sensitive_sections.items():
-        # Extract relevant paragraphs
-        paras = re.split(r'\n{2,}', text_curr)
-        relevant_paras = [p.strip() for p in paras if re.search(pattern, p, re.I)]
-        section_text = ' '.join(relevant_paras)
-        if section_text:
-            section_words = re.findall(r'\w+', section_text.lower())
-            sw_total = len(section_words)
-            s_hedge = sum(1 for w in section_words if any(hk in w for hk in hedging_keywords))
-            density = (s_hedge / sw_total * 100) if sw_total else 0
-            if density < 5:
-                level = 'Low'
-                interp = 'Primarily factual disclosures with minimal hedging—transparent and direct.'
-            elif density < 15:
-                level = 'Medium'
-                interp = 'Balanced mix of facts and explanations—monitor for emerging justifications.'
-            else:
-                level = 'High'
-                interp = 'Heavy justificatory language may obscure key facts—audit for intent to deflect scrutiny.'
-            section_metrics[name] = {'density': density, 'level': level, 'interpretation': interp, 'snippet': section_text[:300] + '...' if len(section_text) > 300 else section_text}
-    
-    # 2. Linguistic Manipulation Risk Score
-    signals = {
-        'excessive_qualifiers': qual_pct > 5,  # Vagueness in estimates signals potential manipulation
-        'hedging_language': hedge_pct > 10,  # Overuse of modals softens accountability
-        'repeated_onetime': onetime_count > 3,  # Frequent "exceptions" may normalize irregularities
-        'defensive_tone': (metrics_curr['sentiment'] < 0 or metrics_curr['passive_score'] > 5),  # Negative/passive tone suggests justification over disclosure
-        'boilerplate_repetition': False
-    }
-    if text_prev:
-        sim = calculate_similarity(text_curr, text_prev)
-        signals['boilerplate_repetition'] = sim > 0.8  # High reuse without context change hides evolution
-    num_active_signals = sum(signals.values())
-    if num_active_signals <= 1:
-        manip_risk = 'Low'
-        risk_interp = 'Language appears straightforward and transparent; low risk of manipulative intent.'
-    elif num_active_signals <= 3:
-        manip_risk = 'Moderate'
-        risk_interp = 'Several linguistic signals present; review for patterns that could mislead stakeholders.'
-    else:
-        manip_risk = 'High'
-        risk_interp = 'Multiple red flags in language use; heightened audit focus on disclosure quality recommended.'
-    signal_explanations = {k: f"**{k.replace('_', ' ').title()}**: {'Active' if v else 'Inactive'}" for k, v in signals.items()}
-    
-    # 3. Disclosure Tone Drift Tracker
-    tone_drift = 'N/A'
-    if text_prev:
-        try:
-            prev_blob = TextBlob(text_prev)
-            prev_sent = prev_blob.sentiment.polarity
-            sent_drift = metrics_curr['sentiment'] - prev_sent
-            passive_drift = metrics_curr['passive_score'] - (analyze_metrics(text_prev, red_flag_df)['passive_score'] if analyze_metrics(text_prev, red_flag_df) else 0)
-            if sent_drift < -0.05 or passive_drift > 1:
-                tone_drift = 'Shift toward defensive/explanatory tone detected—increased risk without enhanced transparency.'
-            elif sent_drift > 0.05:
-                tone_drift = 'Shift toward more neutral/positive tone—potentially improved clarity.'
-            else:
-                tone_drift = 'Stable tone across periods—no notable drift.'
-        except:
-            tone_drift = 'Unable to compute drift.'
-    
-    # 4. Repetition & Boilerplate Detection
-    repetition_level = 'N/A'
-    if text_prev:
-        seq_ratio = difflib.SequenceMatcher(None, text_curr, text_prev).ratio()
-        if seq_ratio > 0.85:
-            repetition_level = 'High—Extensive boilerplate reuse may conceal material changes or avoid fresh scrutiny.'
-        elif seq_ratio > 0.7:
-            repetition_level = 'Moderate—Some repetition observed; check for outdated or unadapted disclosures.'
-        else:
-            repetition_level = 'Low—Primarily fresh language suggests evolving, transparent reporting.'
-    
-    # 5. Linguistic Risk Heatmap Data
-    heatmap_data = []
-    for sec_name, data in section_metrics.items():
-        risk_level_num = {'Low': 1, 'Medium': 2, 'High': 3}[data['level']]
-        heatmap_data.append({
-            'Section': sec_name,
-            'Risk Level': data['level'],
-            'Density (%)': round(data['density'], 1),
-            'Explanation': data['interpretation'][:100] + '...'
-        })
-    
-    return {
-        'section_metrics': section_metrics,
-        'manipulation_risk': manip_risk,
-        'risk_interp': risk_interp,
-        'signal_explanations': signal_explanations,
-        'tone_drift': tone_drift,
-        'repetition_level': repetition_level,
-        'heatmap_df': pd.DataFrame(heatmap_data) if heatmap_data else pd.DataFrame()
-    }
 
 # --- SIDEBAR ---
 with st.sidebar:
@@ -461,58 +335,6 @@ if file_curr:
             else:
                 st.info("Upload Previous Year PDF to see these charts.")
 
-        # --- NEW: ADVANCED LINGUISTIC ANALYSIS ---
-        ling_metrics = analyze_linguistic(text_curr, red_flags_df, text_prev, metrics_curr)
-        
-        if ling_metrics:
-            st.markdown("---")
-            st.subheader("🔍 Advanced Linguistic Analysis")
-            
-            # 2. Manipulation Risk Score
-            col_risk, col_exp = st.columns([1, 2])
-            with col_risk:
-                css_class = f"risk-card {'high-risk' if ling_metrics['manipulation_risk'] == 'High' else 'mod-risk' if ling_metrics['manipulation_risk'] == 'Moderate' else 'low-risk'}"
-                st.markdown(f"""
-                <div class="{css_class}">
-                    <h4>Linguistic Manipulation Risk</h4>
-                    <h2>{ling_metrics['manipulation_risk']}</h2>
-                    <p>{ling_metrics['risk_interp']}</p>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            with col_exp:
-                st.markdown("**Contributing Signals:**")
-                for sig, desc in ling_metrics['signal_explanations'].items():
-                    st.markdown(f"- {desc}")
-            
-            # 3 & 4. Drift and Repetition
-            if text_prev:
-                col_drift, col_rep = st.columns(2)
-                with col_drift:
-                    st.markdown(f"**Tone Drift:** {ling_metrics['tone_drift']}")
-                with col_rep:
-                    st.markdown(f"**Boilerplate Level:** {ling_metrics['repetition_level']}")
-            else:
-                st.info("Upload previous year report for tone drift and repetition analysis.")
-            
-            # 1 & 5. Justification Density & Heatmap
-            if ling_metrics['heatmap_df'].empty:
-                st.info("No sensitive sections (e.g., Revenue Recognition) detected in the scanned text.")
-            else:
-                st.markdown("**Linguistic Risk Heatmap**")
-                # Color by level
-                ling_metrics['heatmap_df']['color'] = ling_metrics['heatmap_df']['Risk Level'].map({'Low': '#00cc96', 'Medium': '#ffc107', 'High': '#ff4b4b'})
-                fig_heatmap = px.bar(ling_metrics['heatmap_df'], x='Section', y='Density (%)', color='Risk Level',
-                                     color_discrete_map={'Low': '#00cc96', 'Medium': '#ffc107', 'High': '#ff4b4b'},
-                                     title="Justification Density by Section")
-                st.plotly_chart(fig_heatmap, use_container_width=True)
-                
-                st.markdown("**Section Details:**")
-                for _, row in ling_metrics['heatmap_df'].iterrows():
-                    with st.expander(f"{row['Section']} ({row['Risk Level']})"):
-                        st.write(row['Explanation'])
-                        if 'snippet' in ling_metrics['section_metrics'][row['Section']]:
-                            st.caption(ling_metrics['section_metrics'][row['Section']]['snippet'])
-
 else:
     st.info("Upload a PDF to begin analysis.")
+fsafasameer.py
