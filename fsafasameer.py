@@ -196,6 +196,7 @@ if file_curr:
             similarity = calculate_similarity(text_curr, text_prev)
 # Line 197 in your provided code
 metrics_curr = analyze_metrics(text_curr, red_flags_df)
+
     if metrics_curr:
         st.title("Forensic Analysis Dashboard")
         st.caption(f"Analyzing {metrics_curr['total_words']:,} words.")
