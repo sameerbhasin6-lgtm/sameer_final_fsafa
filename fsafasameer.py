@@ -194,8 +194,6 @@ if file_curr:
         if text_prev:
             metrics_prev = analyze_metrics(text_prev, red_flags_df)
             similarity = calculate_similarity(text_curr, text_prev)
-# Line 197 in your provided code
-metrics_curr = analyze_metrics(text_curr, red_flags_df)
 
     if metrics_curr:
         st.title("Forensic Analysis Dashboard")
@@ -339,4 +337,3 @@ metrics_curr = analyze_metrics(text_curr, red_flags_df)
 
 else:
     st.info("Upload a PDF to begin analysis.")
-fsafasameer.py
