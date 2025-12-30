@@ -1,6 +1,7 @@
 import streamlit as st
 
 # --- SAFELY IMPORT LIBRARIES ---
+# This block prevents the app from crashing if a library is missing.
 try:
     import pandas as pd
     import plotly.express as px
@@ -19,10 +20,11 @@ try:
     from sklearn.metrics.pairwise import cosine_similarity
 except ImportError as e:
     st.error(f"❌ LIBRARY ERROR: {e}")
-    st.warning("Please install the required libraries: pip install streamlit pandas plotly matplotlib wordcloud textstat textblob scikit-learn pypdf openpyxl statsmodels")
+    st.warning("Please install the required libraries by running this command in your terminal:")
+    st.code("pip install streamlit pandas plotly matplotlib wordcloud textstat textblob scikit-learn pypdf openpyxl statsmodels")
     st.stop()
 
-# --- PAGE CONFIGURATION ---
+# --- PAGE CONFIGURATION (Must be the first Streamlit command) ---
 st.set_page_config(page_title="Forensic & Credit Risk Suite", page_icon="⚖️", layout="wide")
 
 # --- CSS STYLING ---
@@ -254,139 +256,6 @@ def calculate_similarity(text1, text2):
 # ==========================================
 # Init Financial Engine
 fin_engine = FinancialEngine()
-
-# --- MODULE: QUALITATIVE FORENSIC LINGUISTICS ---
-
-class QualitativeForensics:
-    """
-    Advanced linguistic analysis for detecting manipulation intent,
-    defensive writing, and boilerplate concealment.
-    """
-    def __init__(self, text):
-        self.text = text.lower()
-        self.sentences = [s.strip() for s in text.split('.') if len(s.split()) > 5]
-        
-    def analyze_justification_density(self):
-        """
-        Measures the ratio of 'explanatory' words (because, due to, thereby)
-        vs factual reporting. High density suggests defensiveness.
-        """
-        justification_triggers = [
-            'because', 'due to', 'owing to', 'as a result of', 'thereby', 
-            'in order to', 'despite', 'although', 'attributed to', 'driven by'
-        ]
-        
-        words = self.text.split()
-        total_words = len(words) if len(words) > 0 else 1
-        j_count = sum(1 for w in words if w in justification_triggers)
-        density_score = (j_count / total_words) * 1000  # Per 1k words
-        
-        if density_score > 15:
-            level = "HIGH"
-            desc = "Management is using excessive explanatory language. This often signals an attempt to rationalize poor performance or complex accounting choices."
-        elif density_score > 8:
-            level = "MEDIUM"
-            desc = "Moderate use of justification. Standard for complex businesses, but monitor for specific 'excuse-making' patterns."
-        else:
-            level = "LOW"
-            desc = "Factual, direct reporting style. Low linguistic manipulation risk."
-            
-        return {"Level": level, "Score": density_score, "Explanation": desc}
-
-    def detect_boilerplate(self, prev_text_snippet=None):
-        """
-        Checks if the current text is a near-duplicate of previous text.
-        Returns a 'Boilerplate Score' (0-100%).
-        """
-        if not prev_text_snippet:
-            return None
-            
-        # Use SequenceMatcher for text similarity
-        ratio = difflib.SequenceMatcher(None, self.text[:5000], prev_text_snippet[:5000]).ratio()
-        pct = ratio * 100
-        
-        if pct > 95:
-            return "CRITICAL: 'Lazy' Disclosure (Near 100% Copy-Paste)"
-        elif pct > 85:
-            return "HIGH: Boilerplate Repetition (Little New Info)"
-        elif pct > 60:
-            return "MODERATE: Standard Carry-Over"
-        else:
-            return "LOW: Fresh Disclosure Language"
-
-    def calculate_manipulation_risk(self):
-        """
-        Composite Risk Score based on hedging, defensive tone, and one-time items.
-        """
-        # 1. Hedging / Qualifiers
-        hedges = ['approximately', 'roughly', 'estimated', 'presumably', 'possibly', 'unlikely', 'might', 'could', 'suggests']
-        h_count = sum(self.text.count(w) for w in hedges)
-        
-        # 2. "One-Time" / Exceptional Items (The "Big Bath" trap)
-        one_timers = ['exceptional', 'one-time', 'non-recurring', 'unprecedented', 'special item', 'extraordinary', 'restructuring charge']
-        o_count = sum(self.text.count(w) for w in one_timers)
-        
-        # 3. Minimization Language
-        minimizers = ['only', 'merely', 'minor', 'insignificant', 'immaterial', 'slight']
-        m_count = sum(self.text.count(w) for w in minimizers)
-        
-        # Scoring Logic
-        risk_score = 0
-        reasons = []
-        
-        if h_count > 10: 
-            risk_score += 1
-            reasons.append("Excessive Hedging (Vagueness)")
-        if o_count > 3: 
-            risk_score += 1
-            reasons.append("Repeated 'One-Time' Exceptions")
-        if m_count > 5:
-            risk_score += 1
-            reasons.append("Minimization Tone (Downplaying Impact)")
-            
-        # Final Assessment
-        if risk_score >= 2:
-            rating = "HIGH"
-            color = "red"
-        elif risk_score == 1:
-            rating = "MODERATE"
-            color = "orange"
-        else:
-            rating = "LOW"
-            color = "green"
-            
-        return {
-            "Rating": rating, 
-            "Color": color, 
-            "Drivers": reasons, 
-            "Stats": f"Hedges: {h_count} | Exceptions: {o_count} | Minimizers: {m_count}"
-        }
-
-    def generate_tone_heatmap(self):
-        """
-        Maps generic sections to linguistic risk levels.
-        """
-        # Keyword search to approximate sections
-        risk_map = {}
-        
-        sections = {
-            "Revenue Recognition": ["revenue", "sales", "turnover", "recognition"],
-            "Provisions & Contingencies": ["provision", "contingent", "legal", "lawsuit"],
-            "Related Party": ["related party", "associate", "subsidiary", "arm's length"],
-            "Other Income": ["other income", "miscellaneous", "non-operating"]
-        }
-        
-        for section, keywords in sections.items():
-            # Extract simple snippet context
-            count = sum(self.text.count(k) for k in keywords)
-            if count > 10:
-                # If section is heavy, check for risk words specifically nearby
-                # (Simplified proximity check)
-                risk_map[section] = "Analyzed"
-            else:
-                risk_map[section] = "Not Significant"
-                
-        return risk_map
 
 # Sidebar
 with st.sidebar:
