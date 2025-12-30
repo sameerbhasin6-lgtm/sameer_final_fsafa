@@ -1,12 +1,10 @@
 streamlit
 pandas
+numpy
 plotly
 matplotlib
-wordcloud
 textstat
 textblob
 scikit-learn
 pypdf
 openpyxl
-statsmodels
-difflib
